@@ -418,11 +418,10 @@ The following components remain future work:
 * Autonomous orbit coordination
 
 ---
+### Project Structure
 
-# Project Structure
 
 FireSat-S/
-│
 ├── src/
 │   ├── main.cpp
 │   ├── OrbitalTask.cpp
@@ -431,21 +430,17 @@ FireSat-S/
 │   ├── StorageTask.cpp
 │   ├── PowerManager.cpp
 │   └── Logger.cpp
-│
 ├── include/
 │   ├── OrbitalMechanics.h
 │   ├── TinyML_FireModel.h
 │   ├── PowerDomain.h
 │   ├── Logger.h
 │   └── Queues.h
-│
 ├── docs/
 │   ├── Power_Analysis.xlsx
 │   ├── Architecture.png
 │   └── Electrical Power System.pdf
-│
 └── README.md
-
 ---
 
 # Technologies
