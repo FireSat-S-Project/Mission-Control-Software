@@ -2,13 +2,13 @@
 
 ## Sustainable Wildfire Detection Satellite System
 
-### AESH 2026 | Space Systems Engineering
+AESH 2026 | Space Systems Engineering
 
 ---
 
 # Overview
 
-FireSat-S is a conceptual autonomous wildfire-detection satellite architecture designed for early wildfire monitoring across wildfire-prone Mediterranean regions.
+FireSat-S is a **prototype-level autonomous wildfire-detection satellite architecture** designed for early wildfire monitoring across wildfire-prone Mediterranean regions.
 
 The project combines:
 
@@ -18,11 +18,25 @@ The project combines:
 * Hardware-level power domain management
 * Distributed FreeRTOS real-time software architecture
 
-The primary objective of FireSat-S is not continuous global imaging, but intelligent energy-aware sensing.
+FireSat-S focuses on **mission-level energy efficiency through orbital-aware subsystem activation rather than continuous full-time sensing.**
 
 Instead of keeping all subsystems continuously active, FireSat-S activates sensing, AI processing, and communication hardware only during mission-relevant orbital passes.
 
 This significantly reduces average system power consumption while preserving autonomous wildfire detection capability.
+
+---
+
+# Design Philosophy
+
+FireSat-S was designed around five core engineering principles:
+
+* Energy efficiency over continuous sensing
+* Autonomous subsystem activation
+* Minimal always-on hardware
+* Modular RTOS-based subsystem isolation
+* Scalable constellation-ready architecture
+
+The current implementation prioritizes **architectural validation and autonomous power-management logic** over continuous global coverage performance.
 
 ---
 
@@ -32,7 +46,7 @@ FireSat-S is currently presented as:
 
 * A single-satellite mission architecture
 * An embedded systems and autonomous power-management concept
-* A conceptual TinyML-enabled wildfire detection pipeline
+* A prototype-level TinyML-enabled wildfire detection pipeline
 * A software and systems-engineering prototype
 
 The current implementation demonstrates:
@@ -44,9 +58,27 @@ The current implementation demonstrates:
 * Communication scheduling
 * Conceptual AI inference integration
 
-This project is not presented as a fully flight-qualified satellite system.
+This project is **not presented as a fully flight-qualified satellite system.**
 
-Several mission components remain conceptual or prototype-level and are intended for future implementation and validation.
+Several mission components remain prototype-level or conceptual and are intended for future implementation and validation.
+
+---
+
+# Architecture Implementation Status
+
+| Subsystem                        | Status      |
+| -------------------------------- | ----------- |
+| FreeRTOS Scheduler               | Implemented |
+| Queue Communication Architecture | Implemented |
+| Power Gating Logic               | Implemented |
+| Logger & Fault Handling          | Implemented |
+| Orbital Geofencing Logic         | Prototype   |
+| SGP4 Integration Logic           | Prototype   |
+| TinyML Inference Pipeline        | Prototype   |
+| Real MWIR Hardware Integration   | Future Work |
+| Multi-Satellite Coordination     | Future Work |
+| Flight Hardware Validation       | Future Work |
+| Radiation Testing                | Future Work |
 
 ---
 
@@ -60,7 +92,7 @@ FireSat-S instead uses orbital-awareness to dynamically control subsystem activa
 
 Using Two-Line Elements (TLE) and SGP4 orbital propagation, the satellite predicts its position without GPS and activates hardware only when approaching target regions.
 
-Inactive subsystems receive zero electrical power through MOSFET hardware gating.
+Inactive subsystems receive **zero electrical power** through MOSFET hardware gating.
 
 This reduces:
 
@@ -68,6 +100,27 @@ This reduces:
 * Thermal load
 * Communication overhead
 * Unnecessary payload operation time
+
+---
+
+# Energy-Aware Mission Philosophy
+
+Most spacecraft subsystems remain OFF during non-target orbital passes.
+
+### Normally inactive subsystems:
+
+* MWIR thermal payload
+* TinyML co-processor
+* S-band transmitter
+* High-power sensing electronics
+
+These subsystems activate only when:
+
+* The satellite approaches a target geofence
+* A wildfire is detected
+* A ground station communication window becomes available
+
+This architecture minimizes unnecessary power usage and extends operational efficiency.
 
 ---
 
@@ -115,14 +168,9 @@ The payload becomes active only during overpasses above target geofences.
 
 # Revisit Time Clarification
 
-Current orbital simulations were performed using a single satellite configuration.
+Current orbital simulations were performed using a **single-satellite configuration**.
 
-Preliminary STK simulations indicate revisit intervals ranging approximately from:
-
-* ~30 minutes in favorable orbital geometry
-* Up to several hours depending on region and orbital conditions
-
-The project architecture is intentionally scalable.
+Preliminary single-satellite STK simulations indicate revisit intervals ranging from approximately **30 minutes in favorable orbital geometry** to **several hours depending on target region and orbital alignment.**
 
 Future constellation expansion using multiple satellites and orbital phase separation can significantly improve revisit frequency and operational coverage.
 
@@ -141,6 +189,8 @@ Advantages:
 * Reduced mass and hardware complexity
 * Deterministic orbital prediction
 * Improved reliability for long-duration operation
+* Reduced attack surface
+* Simplified fault-tolerant operation
 
 The architecture assumes periodic TLE uplinks from ground stations.
 
@@ -199,6 +249,34 @@ This architecture improves:
 
 ---
 
+# Mission Execution Flow
+
+```text
+Satellite outside target region
+↓
+Deep Sleep mode
+↓
+OrbitalTask predicts target approach
+↓
+PowerManager activates sensing hardware
+↓
+MWIR frame capture
+↓
+TinyML inference
+↓
+Fire detected?
+ ├─ No → discard frame and remain energy-efficient
+ └─ Yes
+      ↓
+   UHF emergency alert transmission
+      ↓
+   Store thermal frame in flash memory
+      ↓
+   S-band downlink during ground station pass
+```
+
+---
+
 # Payload System
 
 ## MWIR Thermal Payload
@@ -221,7 +299,9 @@ This architecture improves:
 
 FireSat-S proposes a lightweight CNN-based TinyML inference architecture for on-board wildfire detection.
 
-The AI layer is currently conceptual/prototype-level and intended to demonstrate autonomous decision-making capability within the embedded architecture.
+The AI layer is currently prototype-level and intended to demonstrate autonomous decision-making capability within the embedded architecture.
+
+The current implementation demonstrates software architecture and inference integration logic rather than a flight-trained wildfire detection model.
 
 ## Proposed Features
 
@@ -266,9 +346,13 @@ Projected AI performance values are conceptual estimates derived from existing w
 * Activated only during ground station visibility windows
 * Reduces unnecessary communication energy consumption
 
+The current ground-station visibility model uses a simplified prototype approximation intentionally selected to reduce computational overhead during the prototype phase.
+
 ---
 
-# Reliability Features
+# Fault Tolerance & Reliability
+
+FireSat-S incorporates several reliability-oriented architectural concepts:
 
 * Hardware watchdog timer
 * Queue-based task isolation
@@ -276,7 +360,10 @@ Projected AI performance values are conceptual estimates derived from existing w
 * Flash telemetry logging
 * Fail-safe MOSFET transitions
 * Autonomous safe-mode fallback
-* Radiation mitigation concepts (future work)
+* TLE validity verification
+* Fault-triggered deep-sleep recovery logic
+
+Future work includes advanced radiation mitigation and fault-tolerant hardware validation.
 
 ---
 
@@ -287,6 +374,19 @@ Projected AI performance values are conceptual estimates derived from existing w
 | Prototype            | STM32L4 / ESP32-S3      | Ground testing                |
 | Engineering Model    | STM32H7                 | Embedded validation           |
 | Future Flight Target | LEON-based architecture | Radiation-tolerant deployment |
+
+---
+
+# ADCS Note
+
+The current project assumes a simplified ADCS layer for mission-level architectural validation.
+
+Future iterations may include:
+
+* Magnetorquers
+* Reaction wheels
+* Sun sensors
+* Autonomous attitude stabilization logic
 
 ---
 
@@ -330,7 +430,8 @@ FireSat-S/
 │   ├── SensingTask.cpp
 │   ├── CommunicationTask.cpp
 │   ├── StorageTask.cpp
-│   └── PowerManager.cpp
+│   ├── PowerManager.cpp
+│   └── Logger.cpp
 │
 ├── include/
 │   ├── OrbitalMechanics.h
@@ -359,3 +460,4 @@ C/C++ • FreeRTOS • STM32H7 • TinyML • SGP4 • MWIR Infrared • S-band 
 FireSat-S Team | AESH 2026
 
 Building intelligent and energy-efficient space systems for environmental protection and rapid wildfire response from orbit.
+
