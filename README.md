@@ -1,115 +1,130 @@
 # FireSat-S
 
-### Sustainable Wildfire Detection Satellite System
+## Sustainable Wildfire Detection Satellite System
 
-**AESH 2026 | Space Systems Engineering**
+### AESH 2026 | Space Systems Engineering
 
 ---
 
 # Overview
 
-**FireSat-S** is an autonomous satellite system for early wildfire detection across **Algeria, Greece, and Turkey**, combining:
+FireSat-S is a conceptual autonomous wildfire-detection satellite architecture designed for early wildfire monitoring across wildfire-prone Mediterranean regions.
 
-* Orbital mechanics (SGP4 + TLE propagation)
+The project combines:
+
+* Orbital mechanics using SGP4 + TLE propagation
 * MWIR thermal imaging
-* On-board TinyML inference
+* On-board TinyML inference architecture
 * Hardware-level power domain management
+* Distributed FreeRTOS real-time software architecture
 
-The system intelligently activates sensing and AI processing **only when the satellite is over target regions**, dramatically reducing average system power consumption.
+The primary objective of FireSat-S is not continuous global imaging, but intelligent energy-aware sensing.
+
+Instead of keeping all subsystems continuously active, FireSat-S activates sensing, AI processing, and communication hardware only during mission-relevant orbital passes.
+
+This significantly reduces average system power consumption while preserving autonomous wildfire detection capability.
+
+---
+
+# Project Scope
+
+FireSat-S is currently presented as:
+
+* A single-satellite mission architecture
+* An embedded systems and autonomous power-management concept
+* A conceptual TinyML-enabled wildfire detection pipeline
+* A software and systems-engineering prototype
+
+The current implementation demonstrates:
+
+* RTOS task architecture
+* Queue-based subsystem isolation
+* Orbital geofencing logic
+* Autonomous hardware power gating
+* Communication scheduling
+* Conceptual AI inference integration
+
+This project is not presented as a fully flight-qualified satellite system.
+
+Several mission components remain conceptual or prototype-level and are intended for future implementation and validation.
 
 ---
 
 # Key Innovation
 
-FireSat-S replaces continuous always-on operation with a **geofenced autonomous power architecture**.
+## Orbital-Aware Autonomous Power Gating
 
-Using **TLE/SGP4 orbital propagation instead of GPS**, the satellite predicts its own orbital position and activates subsystems only during mission-relevant overpasses.
+Traditional small satellites often keep payload and communication systems continuously powered.
 
-### Result:
+FireSat-S instead uses orbital-awareness to dynamically control subsystem activation.
 
-| Parameter            | Traditional Always-ON | FireSat-S |
-| -------------------- | --------------------- | --------- |
-| Average System Power | 109 W                 | 22.5 W    |
-| Energy per Orbit     | 178.0 Wh              | 36.8 Wh   |
-| Power Saving         | —                     | **79.3%** |
+Using Two-Line Elements (TLE) and SGP4 orbital propagation, the satellite predicts its position without GPS and activates hardware only when approaching target regions.
+
+Inactive subsystems receive zero electrical power through MOSFET hardware gating.
+
+This reduces:
+
+* Average power consumption
+* Thermal load
+* Communication overhead
+* Unnecessary payload operation time
 
 ---
 
-# Mission Parameters
+# Power Consumption Summary
 
-| Parameter                | Value                        |
-| ------------------------ | ---------------------------- |
-| Orbit Type               | Sun-Synchronous Orbit (SSO)  |
-| Altitude                 | 700 km                       |
-| Inclination              | 98.18°                       |
-| Orbit Period             | 5926.38 s (~98.8 min)        |
-| Eccentricity             | ~0.001 (Near Circular Orbit) |
-| RAAN                     | 321.5°                       |
-| Argument of Perigee      | 90°                          |
-| Satellites               | 2 (180° phase separation)    |
-| Target Regions           | Algeria • Greece • Turkey    |
-| Active Coverage Fraction | ~8% of orbit                 |
-| Revisit Time             | < 25 min                     |
-| Alert Latency            | < 15 min                     |
+| Parameter              | Traditional Always-ON | FireSat-S |
+| ---------------------- | --------------------- | --------- |
+| Average System Power   | 109 W                 | 22.5 W    |
+| Energy per Orbit       | 178.0 Wh              | 36.8 Wh   |
+| Estimated Power Saving | —                     | 79.3%     |
+
+These values are based on the current single-satellite architecture and internal mission power analysis.
+
+---
+
+# Mission Configuration
+
+| Parameter            | Value                         |
+| -------------------- | ----------------------------- |
+| Orbit Type           | Sun-Synchronous Orbit (SSO)   |
+| Altitude             | 700 km                        |
+| Inclination          | 98.18°                        |
+| Orbit Period         | 5926 s (~98.8 min)            |
+| Eccentricity         | ~0.001                        |
+| RAAN                 | 321.5°                        |
+| Argument of Perigee  | 90°                           |
+| Current Architecture | Single Satellite              |
+| Future Expansion     | Multi-satellite constellation |
 
 ---
 
 # Target Regions
 
-The mission focuses on wildfire-prone Mediterranean regions:
+The mission focuses on wildfire-prone Mediterranean regions.
 
-| Country | Latitude Range | Longitude Range |
+| Region  | Latitude Range | Longitude Range |
 | ------- | -------------- | --------------- |
 | Algeria | 18°N → 38°N    | 3°W → 13.5°E    |
 | Greece  | 34°N → 42°N    | 19°E → 30°E     |
 | Turkey  | 36°N → 42°N    | 26°E → 45°E     |
 
-The satellite only activates thermal sensing and AI inference when passing over these regions.
+The payload becomes active only during overpasses above target geofences.
 
 ---
 
-# Power Domain Management
+# Revisit Time Clarification
 
-FireSat-S implements **hardware-level MOSFET power gating**.
+Current orbital simulations were performed using a single satellite configuration.
 
-Inactive subsystems receive **zero electrical power** (not standby mode), significantly reducing energy consumption and thermal load.
+Preliminary STK simulations indicate revisit intervals ranging approximately from:
 
-## Power Modes
+* ~30 minutes in favorable orbital geometry
+* Up to several hours depending on region and orbital conditions
 
-| Mode       | Active Systems          | Power | Usage               |
-| ---------- | ----------------------- | ----- | ------------------- |
-| Deep Sleep | OBC + ADCS only         | ~15 W | Outside target zone |
-| Standby    | Core systems + comms RX | ~30 W | Approaching target  |
-| Sensing    | MWIR + TinyML           | ~55 W | Wildfire scanning   |
-| Transmit   | S-band / UHF active     | ~75 W | Alert transmission  |
+The project architecture is intentionally scalable.
 
----
-
-# System Architecture
-
-The firmware uses a **Distributed FreeRTOS Architecture** where each subsystem operates as an independent real-time task.
-
-```text
-┌─────────────────────────────────────────────────────┐
-│                   FreeRTOS Scheduler                │
-├──────────────┬──────────────┬───────────────────────┤
-│ OrbitalTask  │ SensingTask  │  CommunicationTask    │
-│ (HIGH prio)  │ (HIGH prio)  │  (MEDIUM prio)        │
-│              │              │                       │
-│ SGP4 TLE     │ MWIR capture │ UHF alert TX          │
-│ propagation  │ TinyML infer │ S-band data downlink  │
-│ Geofence     │ Fire detect  │ Ground station sync   │
-│ check        │ Flash store  │                       │
-├──────────────┴──────────────┴───────────────────────┤
-│           PowerManager  (HIGHEST prio)              │
-│   Hardware MOSFET gating + safe transitions         │
-├─────────────────────────────────────────────────────┤
-│             StorageTask  (LOW prio)                 │
-│     Flash buffer + downlink queue management        │
-└─────────────────────────────────────────────────────┘
-```
-
-All tasks communicate exclusively through **FreeRTOS Queues**.
+Future constellation expansion using multiple satellites and orbital phase separation can significantly improve revisit frequency and operational coverage.
 
 ---
 
@@ -117,18 +132,70 @@ All tasks communicate exclusively through **FreeRTOS Queues**.
 
 Instead of GPS, FireSat-S uses:
 
-* **Two-Line Elements (TLE)**
-* **SGP4 orbital propagation**
+* Two-Line Elements (TLE)
+* SGP4 orbital propagation
 
 Advantages:
 
-* Saves ~2 W power
-* Saves ~0.4 kg mass
-* Reduces hardware complexity
-* Higher reliability in LEO operations
+* Reduced power consumption
+* Reduced mass and hardware complexity
 * Deterministic orbital prediction
+* Improved reliability for long-duration operation
 
-Satellite position error remains below **1 km** when TLE age is less than 72 hours.
+The architecture assumes periodic TLE uplinks from ground stations.
+
+---
+
+# Power Domain Management
+
+FireSat-S implements hardware-level MOSFET power gating.
+
+Subsystems are electrically disconnected when inactive rather than placed in standby mode.
+
+## Power Modes
+
+| Mode       | Active Systems          | Estimated Power | Usage               |
+| ---------- | ----------------------- | --------------- | ------------------- |
+| Deep Sleep | OBC + ADCS only         | ~15 W           | Outside target zone |
+| Standby    | Core systems + comms RX | ~30 W           | Approaching target  |
+| Sensing    | MWIR + TinyML           | ~55 W           | Thermal scanning    |
+| Transmit   | UHF / S-band active     | ~75 W           | Alert transmission  |
+
+---
+
+# System Software Architecture
+
+FireSat-S uses a distributed FreeRTOS architecture.
+
+Each subsystem operates as an isolated real-time task.
+
+```text
+┌─────────────────────────────────────────────────────┐
+│                   FreeRTOS Scheduler                │
+├──────────────┬──────────────┬───────────────────────┤
+│ OrbitalTask  │ SensingTask  │  CommunicationTask    │
+│              │              │                       │
+│ SGP4 TLE     │ MWIR capture │ UHF alert TX          │
+│ propagation  │ TinyML infer │ S-band downlink       │
+│ Geofence     │ Fire detect  │ Ground station sync   │
+│ control      │ Flash queue  │                       │
+├──────────────┴──────────────┴───────────────────────┤
+│             PowerManagerTask                        │
+│       Autonomous MOSFET power gating                │
+├─────────────────────────────────────────────────────┤
+│                 StorageTask                         │
+│       Flash buffering and frame management          │
+└─────────────────────────────────────────────────────┘
+```
+
+All tasks communicate exclusively through FreeRTOS queues.
+
+This architecture improves:
+
+* Fault isolation
+* Deterministic timing
+* Scalability
+* Reliability
 
 ---
 
@@ -136,56 +203,45 @@ Satellite position error remains below **1 km** when TLE age is less than 72 hou
 
 ## MWIR Thermal Payload
 
-| Parameter         | Specification          |
-| ----------------- | ---------------------- |
-| Spectral Range    | 3.5 – 5.0 µm           |
-| Detector Type     | HgCdTe FPA             |
-| Ground Resolution | 100 m GSD              |
-| Swath Width       | 185 km                 |
-| Aperture Diameter | 0.263 m                |
-| NETD              | < 0.1 K                |
-| Cooling           | Stirling Cooler @ 77 K |
-| Frame Rate        | 10 fps                 |
-| ADC               | 14-bit                 |
-| Active Power      | 32 W                   |
-| Mass              | 28 kg                  |
+| Parameter              | Specification          |
+| ---------------------- | ---------------------- |
+| Spectral Range         | 3.5 – 5.0 µm           |
+| Detector Type          | HgCdTe FPA             |
+| Ground Resolution      | 100 m GSD              |
+| Swath Width            | 185 km                 |
+| NETD                   | < 0.1 K                |
+| Cooling                | Stirling Cooler @ 77 K |
+| Frame Rate             | 10 fps                 |
+| ADC                    | 14-bit                 |
+| Estimated Active Power | 32 W                   |
 
 ---
 
-# Edge AI System (TinyML)
+# TinyML Fire Detection System
 
-A lightweight CNN model performs on-board wildfire detection.
+FireSat-S proposes a lightweight CNN-based TinyML inference architecture for on-board wildfire detection.
 
-## Features
+The AI layer is currently conceptual/prototype-level and intended to demonstrate autonomous decision-making capability within the embedded architecture.
 
-* Real-time thermal image inference
+## Proposed Features
+
+* Real-time thermal frame inference
 * Confidence-based fire classification
-* Bounding coordinate estimation
-* False-positive minimization
+* Geographic fire localization
 * Communication bandwidth reduction
+* Autonomous alert prioritization
 
-## Model Characteristics
+## Planned Model Characteristics
 
-| Parameter               | Value                 |
+| Parameter               | Target Value          |
 | ----------------------- | --------------------- |
 | Input Size              | 64 × 64 thermal frame |
 | Inference Hardware      | Edge AI Co-processor  |
-| Active Power            | 8 W                   |
+| Estimated AI Power      | 8 W                   |
 | Detection Threshold     | 0.92 confidence       |
 | Minimum Detectable Fire | ≥ 1 hectare           |
-| Detection Accuracy      | > 95%                 |
 
----
-
-# ADCS (Attitude Determination & Control)
-
-| Component       | Specification                 |
-| --------------- | ----------------------------- |
-| Star Tracker    | < 2 arcsec accuracy           |
-| Reaction Wheels | 4-wheel pyramid configuration |
-| IMU             | < 0.5°/hr gyro bias           |
-| Sun Sensors     | Full 4π coverage              |
-| Magnetometer    | ±200 µT                       |
+Projected AI performance values are conceptual estimates derived from existing wildfire-detection research and TinyML system literature.
 
 ---
 
@@ -193,44 +249,73 @@ A lightweight CNN model performs on-board wildfire detection.
 
 | Link   | Hardware       | Data Rate | Purpose                   |
 | ------ | -------------- | --------- | ------------------------- |
-| S-band | Syrlinks EWC27 | 10 Mbps   | Full image downlink       |
+| S-band | Syrlinks EWC27 | 10 Mbps   | Thermal image downlink    |
 | UHF    | AstroDev Li-2  | 9.6 kbps  | Emergency wildfire alerts |
 
 ## Communication Strategy
 
-### UHF Path
+### UHF Emergency Path
 
-* Immediate wildfire alerts
-* < 200 bytes packets
-* < 2 min delivery latency
+* Immediate low-size wildfire alerts
+* < 200 byte packets
+* Optimized for low-power rapid notification
 
-### S-band Path
+### S-band Downlink
 
-* High-resolution thermal frames
-* Downlink during ground station visibility windows
-
----
-
-# Hardware Targets
-
-| Environment       | Hardware           | Purpose                       |
-| ----------------- | ------------------ | ----------------------------- |
-| Prototype         | STM32L4 / ESP32-S3 | Ground testing                |
-| Engineering Model | STM32H7            | Reliability validation        |
-| Flight Model      | SPARC Leon3        | Radiation-hardened deployment |
+* Full thermal frame transmission
+* Activated only during ground station visibility windows
+* Reduces unnecessary communication energy consumption
 
 ---
 
 # Reliability Features
 
-* Hardware Watchdog Timer
-* Fail-safe MOSFET transitions
+* Hardware watchdog timer
 * Queue-based task isolation
 * Sensor retry mechanisms
 * Flash telemetry logging
-* Radiation mitigation (TMR)
+* Fail-safe MOSFET transitions
 * Autonomous safe-mode fallback
-* Fault-tolerant communication paths
+* Radiation mitigation concepts (future work)
+
+---
+
+# Hardware Targets
+
+| Environment          | Hardware                | Purpose                       |
+| -------------------- | ----------------------- | ----------------------------- |
+| Prototype            | STM32L4 / ESP32-S3      | Ground testing                |
+| Engineering Model    | STM32H7                 | Embedded validation           |
+| Future Flight Target | LEON-based architecture | Radiation-tolerant deployment |
+
+---
+
+# Current Limitations
+
+The current project focuses primarily on mission architecture and embedded systems design.
+
+The following components remain future work:
+
+* Real wildfire dataset training
+* Flight-qualified AI deployment
+* Multi-satellite coordination
+* Real-time ground segment integration
+* Full radiation testing
+* Hardware-in-the-loop validation
+* Orbit correction and station-keeping
+
+---
+
+# Future Improvements
+
+* Multi-satellite constellation deployment
+* Adaptive AI thresholding
+* SWIR + MWIR multispectral fusion
+* Autonomous anomaly detection
+* Real-time telemetry dashboard
+* Advanced ground station simulator
+* Inter-satellite communication
+* Autonomous orbit coordination
 
 ---
 
@@ -263,43 +348,14 @@ FireSat-S/
 
 ---
 
-# Key Results Summary
-
-| Metric             | Traditional Systems | FireSat-S  |
-| ------------------ | ------------------- | ---------- |
-| Detection Latency  | Hours               | < 15 min   |
-| Average Power      | 109 W               | 22.5 W     |
-| Energy per Orbit   | 178.0 Wh            | 36.8 Wh    |
-| Power Saving       | —                   | 79.3%      |
-| Alert Transmission | Delayed             | < 2 min    |
-| Daily Revisits     | Limited             | 4× per day |
-
----
-
-# Future Improvements
-
-* Health Monitoring AI
-* Autonomous anomaly detection
-* Multi-spectral fusion (SWIR + MWIR)
-* Real-time telemetry dashboard
-* Ground station simulator
-* Adaptive AI thresholding
-* Autonomous orbit correction
-
----
-
 # Technologies
 
-`C/C++` • `FreeRTOS` • `STM32H7` • `TinyML` • `SGP4` • `MWIR Infrared` • `S-band` • `UHF`
+C/C++ • FreeRTOS • STM32H7 • TinyML • SGP4 • MWIR Infrared • S-band • UHF
 
 ---
 
 # Team
 
-## FireSat-S Team | AESH 2026
+FireSat-S Team | AESH 2026
 
 Building intelligent and energy-efficient space systems for environmental protection and rapid wildfire response from orbit.
-
----
-
-If this project helped you, please  star the repository.
