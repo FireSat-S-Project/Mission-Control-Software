@@ -1,1 +1,0 @@
-Satellite Power Analysis Document
