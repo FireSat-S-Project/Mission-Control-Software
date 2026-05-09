@@ -418,10 +418,6 @@ The following components remain future work:
 * Autonomous orbit coordination
 
 ---
-
-# Project Structure
-
-```text
 FireSat-S/
 │
 ├── src/
@@ -442,11 +438,10 @@ FireSat-S/
 │
 ├── docs/
 │   ├── Power_Analysis.xlsx
-│   └── Architecture.png
+│   ├── Architecture.png
+│   ├── Electrical_Power_System.pdf  
 │
 └── README.md
-```
-
 ---
 
 # Technologies
