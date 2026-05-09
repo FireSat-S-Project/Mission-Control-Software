@@ -5,27 +5,35 @@
  * @author  FireSat-S Team | AESH 2026
  *
  * Design principles:
- *   1. Fail-safe  — ALL gates close before ANY gate opens (no shoot-through)
- *   2. HAL-based  — STM32 HAL only, no Arduino.h
- *   3. RTOS-aware — vTaskDelay for cooler warm-up (never busy-wait)
- *   4. Logged     — every transition written to flash telemetry
+ *  1. Fail-safe   — ALL gates close before ANY gate opens (no shoot-through).
+ *  2. HAL-based   — STM32 HAL only; no Arduino.h.
+ *  3. RTOS-aware  — vTaskDelay for cooler warm-up lives in PowerManagerTask,
+ *                   NOT inside PowerManager_setDomain().  setDomain() is a
+ *                   pure state-transition function that must return promptly
+ *                   so the caller task is not unnecessarily blocked.
+ *  4. Logged      — every domain transition written to flash telemetry.
  *
- * Power savings verified against docs/Power_Analysis.xlsx:
- *   Average power WITH gating : 22.5 W  (79.3% saving vs. always-on 109 W)
- *   Energy per orbit WITH gating: 36.8 Wh vs. 178.0 Wh without
+ * Power savings (verified against docs/Power_Analysis.xlsx):
+ *   Average power WITH gating : 22.5 W  (79.3% saving vs always-on 109 W)
+ *   Energy per orbit WITH gating: 36.8 Wh vs 178.0 Wh without
  */
 
 #include "PowerDomain.h"
 #include "Logger.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "Queues.h"
 
-/* ── Module-private state ─────────────────────────────────────────────────── */
+/*——— Module-private state ————————————————————————————————————————————————————*/
+
 static PowerDomain_t currentDomain = PWR_DOMAIN_DEEP_SLEEP;
 
-/* ══════════════════════════════════════════════════════════════════════════ */
+/*============================================================================
+ *  PowerManager_init
+ *===========================================================================*/
 
-void PowerManager_init(void) {
+void PowerManager_init(void)
+{
     /* Configure all gate pins as push-pull outputs, no pull resistor */
     GPIO_InitTypeDef cfg = {};
     cfg.Pin   = PIN_GATE_ALL;
@@ -41,32 +49,56 @@ void PowerManager_init(void) {
     Logger_log("PowerManager: init OK — all gates LOW, domain=DEEP_SLEEP");
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
+/*============================================================================
+ *  PowerManager_setDomain
+ *
+ *  Pure state-transition function — returns promptly.
+ *  Callers that need a stabilisation delay (e.g. Stirling cooler warm-up)
+ *  must implement that delay in their own task context AFTER calling this
+ *  function, not by blocking here.
+ *
+ *  FIXED: removed vTaskDelay(MWIR_COOLER_STABILIZE_MS) from inside this
+ *  function.  Previously the 500 ms cooler warm-up blocked PowerManagerTask
+ *  for half a second during every SENSING transition, preventing it from
+ *  processing any new domain requests (e.g. an urgent DEEP_SLEEP from a
+ *  LOG_FAULT event) during that window.
+ *  The delay now lives in PowerManagerTask (see main.cpp) immediately after
+ *  the setDomain() call, inside the task loop where blocking is safe.
+ *===========================================================================*/
 
-void PowerManager_setDomain(PowerDomain_t domain) {
+void PowerManager_setDomain(PowerDomain_t domain)
+{
     if (domain == currentDomain) return;   /* no transition needed */
 
-    /* ── Step 1: ALWAYS close every gate first ──────────────────────────────
-       This is the critical fail-safe step.
-       If the MCU resets mid-transition, all gates default LOW — never stuck
-       in a high-power state that would drain or damage hardware.           */
+    /*——— Step 1: ALWAYS close every gate first ———————————————————————————————
+     *
+     * Critical fail-safe step.  If the MCU resets mid-transition, all gates
+     * default LOW — never stuck in a high-power state that drains or damages
+     * hardware.
+     *————————————————————————————————————————————————————————————————————————*/
     HAL_GPIO_WritePin(GATE_PORT, PIN_GATE_ALL, GPIO_PIN_RESET);
 
-    /* ── Step 2: Enable only what this domain requires ──────────────────── */
+    /*——— Step 2: Enable only what this domain requires ———————————————————————
+     *
+     * TRANSMIT is a superset of SENSING: fallthrough is intentional —
+     * TRANSMIT needs both the imaging hardware (SENSING gates) AND the
+     * S-band transmitter.
+     *————————————————————————————————————————————————————————————————————————*/
     switch (domain) {
-
         case PWR_DOMAIN_TRANSMIT:
             /* Transmit needs S-band TX on top of sensing hardware */
             HAL_GPIO_WritePin(GATE_PORT, PIN_GATE_SBAND, GPIO_PIN_SET);
-            /* fallthrough intentional — TRANSMIT is a superset of SENSING */
             [[fallthrough]];
 
         case PWR_DOMAIN_SENSING:
-            /* Open MWIR imager and AI co-processor gates */
+            /* Open MWIR imager and AI co-processor gates.
+             *
+             * NOTE: Stirling cooler requires ~500 ms to reach 77 K operating
+             * temperature.  This stabilisation delay must be implemented by
+             * the CALLER (PowerManagerTask) AFTER this function returns —
+             * not here.  See PowerManagerTask in main.cpp. */
             HAL_GPIO_WritePin(GATE_PORT, PIN_GATE_MWIR, GPIO_PIN_SET);
             HAL_GPIO_WritePin(GATE_PORT, PIN_GATE_AI,   GPIO_PIN_SET);
-            /* Wait for Stirling cooler to reach operating temp (77 K) */
-            vTaskDelay(pdMS_TO_TICKS(MWIR_COOLER_STABILIZE_MS));
             break;
 
         case PWR_DOMAIN_STANDBY:
@@ -79,29 +111,32 @@ void PowerManager_setDomain(PowerDomain_t domain) {
             break;
     }
 
-    /* ── Step 3: Record transition ───────────────────────────────────────── */
+    /*——— Step 3: Record transition ———————————————————————————————————————————*/
     currentDomain = domain;
+
     Logger_logLevel(LOG_INFO,
-        "PowerManager: -> domain %d  current=%.1f W  "
-        "(orbit avg=22.5 W, saving=79.3%%)",
-        (int)domain,
-        PowerManager_getCurrentPower_W());
+                    "PowerManager: -> domain %d  current=%.1f W  "
+                    "(orbit avg=22.5 W, saving=79.3%%)",
+                    (int)domain,
+                    PowerManager_getCurrentPower_W());
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
+/*============================================================================
+ *  Getters
+ *===========================================================================*/
 
-PowerDomain_t PowerManager_getCurrentDomain(void) {
+PowerDomain_t PowerManager_getCurrentDomain(void)
+{
     return currentDomain;
 }
 
-float PowerManager_getCurrentPower_W(void) {
+float PowerManager_getCurrentPower_W(void)
+{
     switch (currentDomain) {
-        case PWR_DOMAIN_DEEP_SLEEP: return PWR_DEEP_SLEEP_W;   /* 15.0 W */
-        case PWR_DOMAIN_STANDBY:    return PWR_STANDBY_W;      /* 30.0 W */
-        case PWR_DOMAIN_SENSING:    return PWR_SENSING_W;      /* 55.0 W */
-        case PWR_DOMAIN_TRANSMIT:   return PWR_TRANSMIT_W;     /* 75.0 W */
-        default:                    return PWR_DEEP_SLEEP_W;
+        case PWR_DOMAIN_DEEP_SLEEP:  return PWR_DEEP_SLEEP_W;   /* 15.0 W */
+        case PWR_DOMAIN_STANDBY:     return PWR_STANDBY_W;      /* 30.0 W */
+        case PWR_DOMAIN_SENSING:     return PWR_SENSING_W;      /* 55.0 W */
+        case PWR_DOMAIN_TRANSMIT:    return PWR_TRANSMIT_W;     /* 75.0 W */
+        default:                     return PWR_DEEP_SLEEP_W;
     }
 }
-
-    
