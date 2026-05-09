@@ -9,9 +9,23 @@
  *          (saves ~2 W, ~0.4 kg) and improves reliability at 700 km altitude
  *          where GPS signal geometry is suboptimal.
  *
- *          Algorithm: Simplified General Perturbations 4 (SGP4)
- *          Reference: Vallado et al., "Revisiting Spacetrack Report #3"
- *          Accuracy:  < 1 km position error for TLE age < 3 days
+ *          Algorithm : Simplified General Perturbations 4 (SGP4)
+ *          Reference : Vallado et al., "Revisiting Spacetrack Report #3"
+ *          Accuracy  : < 1 km position error for TLE age < 3 days
+ *
+ * Target geofence covers wildfire-prone Mediterranean regions:
+ *
+ *   Region    Lat range        Lon range
+ *   ───────────────────────────────────────
+ *   Algeria   18°N → 38°N     3°W  → 13.5°E
+ *   Greece    34°N → 42°N     19°E → 30°E
+ *   Turkey    36°N → 42°N     26°E → 45°E
+ *
+ * The combined bounding box used for fast geofence pre-check:
+ *   GEO_LAT_MIN = 18°N,  GEO_LAT_MAX = 38°N
+ *   GEO_LON_MIN = -3°E,  GEO_LON_MAX = 13.5°E
+ * (Algeria-only box; Greece/Turkey require a second polygon check — see
+ *  OrbitalMechanics_isInTargetZone() implementation notes.)
  */
 
 #ifndef ORBITAL_MECHANICS_H
@@ -20,38 +34,42 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ── Mission orbital parameters ───────────────────────────────────────────── */
-#define ORBIT_ALTITUDE_KM      700.0f   /* nominal altitude                   */
-#define ORBIT_INCLINATION_DEG   98.2f   /* Sun-Synchronous Orbit (SSO)        */
-#define ORBIT_PERIOD_MIN        98.8f   /* one full orbit                     */
-#define ORBIT_VELOCITY_KMS       7.5f   /* orbital speed                      */
-#define ACTIVE_FRACTION          0.08f  /* fraction of orbit over target zone */
+/*——— Mission orbital parameters ——————————————————————————————————————————————*/
 
-/* ── Target geofence — Algeria + Tunisia ─────────────────────────────────── */
-#define GEO_LAT_MIN   18.0f   /* degrees North                               */
-#define GEO_LAT_MAX   38.0f   /* degrees North                               */
-#define GEO_LON_MIN   -3.0f   /* degrees East                                */
-#define GEO_LON_MAX   13.5f   /* degrees East                                */
+#define ORBIT_ALTITUDE_KM        700.0f   /**< nominal altitude above WGS84   */
+#define ORBIT_INCLINATION_DEG     98.2f   /**< Sun-Synchronous Orbit (SSO)    */
+#define ORBIT_PERIOD_MIN          98.8f   /**< one full orbit                 */
+#define ORBIT_VELOCITY_KMS         7.5f   /**< orbital speed                  */
+#define ACTIVE_FRACTION            0.08f  /**< fraction of orbit over target zone */
 
-/* ── TLE element set (uplinked from ground, stored on-board) ─────────────── */
+/*——— Target geofence — combined bounding box (Algeria primary) ———————————————*/
+
+#define GEO_LAT_MIN   18.0f   /**< degrees North */
+#define GEO_LAT_MAX   38.0f   /**< degrees North */
+#define GEO_LON_MIN   -3.0f   /**< degrees East  */
+#define GEO_LON_MAX   13.5f   /**< degrees East  */
+
+/*——— TLE element set (uplinked from ground, stored on-board) ————————————————*/
+
 typedef struct {
-    char    line1[70];          /* TLE line 1 — epoch, drag, etc.            */
-    char    line2[70];          /* TLE line 2 — inclination, RAAN, e, etc.   */
-    uint32_t uplink_timestamp;  /* Unix time of last ground uplink           */
-    float   age_hours;          /* TLE age — validity degrades after 3 days  */
+    char     line1[70];          /**< TLE line 1 — epoch, drag, etc.          */
+    char     line2[70];          /**< TLE line 2 — inclination, RAAN, e, etc. */
+    uint32_t uplink_timestamp;   /**< Unix time of last ground uplink         */
+    float    age_hours;          /**< TLE age — validity degrades after 3 days */
 } TLESet_t;
 
-/* ── Current satellite geographic position ───────────────────────────────── */
+/*——— Current satellite geographic position ——————————————————————————————————*/
+
 typedef struct {
-    float    lat;               /* geodetic latitude  (degrees, -90 to +90)  */
-    float    lon;               /* geodetic longitude (degrees, -180 to +180)*/
-    float    alt_km;            /* altitude above WGS84 ellipsoid (km)       */
-    float    velocity_kms;      /* orbital speed (km/s)                      */
-    uint32_t timestamp;         /* Unix time of this position fix            */
-    bool     tle_valid;         /* false if TLE age > 72 hours               */
+    float    lat;           /**< geodetic latitude  (degrees, -90 to +90)     */
+    float    lon;           /**< geodetic longitude (degrees, -180 to +180)   */
+    float    alt_km;        /**< altitude above WGS84 ellipsoid (km)          */
+    float    velocity_kms;  /**< orbital speed (km/s)                         */
+    uint32_t timestamp;     /**< Unix time of this position fix               */
+    bool     tle_valid;     /**< false if TLE age > 72 hours                  */
 } GeoPosition_t;
 
-/* ── Public API ───────────────────────────────────────────────────────────── */
+/*——— Public API ——————————————————————————————————————————————————————————————*/
 
 /**
  * @brief  Initialise SGP4 propagator with stored TLE set.
@@ -68,14 +86,15 @@ GeoPosition_t OrbitalMechanics_getCurrentPosition(void);
 
 /**
  * @brief  Check if current position is inside the target geofence.
- * @param  pos  pointer to a GeoPosition_t from getCurrentPosition()
- * @return true if satellite is over Algeria / Tunisia target zone.
+ *         Checks all three sub-regions: Algeria, Greece, Turkey.
+ * @param  pos  Pointer to a GeoPosition_t from getCurrentPosition().
+ * @return true if satellite is over any target zone.
  */
 bool OrbitalMechanics_isInTargetZone(const GeoPosition_t *pos);
 
 /**
  * @brief  Update stored TLE set from ground uplink data.
- * @param  tle   new TLE set received via S-band or UHF uplink command
+ * @param  tle  New TLE set received via S-band or UHF uplink command.
  * @return true on successful validation and storage.
  */
 bool OrbitalMechanics_updateTLE(const TLESet_t *tle);
@@ -88,4 +107,3 @@ bool OrbitalMechanics_updateTLE(const TLESet_t *tle);
 uint32_t OrbitalMechanics_secondsToNextPass(void);
 
 #endif /* ORBITAL_MECHANICS_H */
-
